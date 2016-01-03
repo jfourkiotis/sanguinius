@@ -2,6 +2,8 @@ import Darwin.C;
 
 enum Value {
     case Fixnum(n: Int)
+    case True
+    case False
 }
 
 func IsFixnum(v: Value) -> Bool {
@@ -15,6 +17,9 @@ let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
 let MINUS: CInt = 40
 let ZERO: CInt = 48
+let SHARP: CInt = 35 // '#'
+let T: CInt = 116 // 't'
+let F: CInt = 102 // 'f'
 
 func _IsDelimiter(c: CInt) -> Bool {
     return isspace(c) != 0    || c == EOF /* -1  */ || 
@@ -50,7 +55,18 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
     var c = getc(stream)
     var sign = 1
     var num = 0
-    if isdigit(c) != 0 || (c == MINUS && (isdigit(_Peek(stream)) != 0)) {
+
+    if c == SHARP { /* read a boolean */
+        c = getc(stream)
+        switch (c) {
+            case T: return .True
+            case F: return .False
+            default: 
+                print("unknown boolean literal")
+                exit(-1)
+            
+        }
+    } else if isdigit(c) != 0 || (c == MINUS && (isdigit(_Peek(stream)) != 0)) {
         if c == MINUS {
             sign = -1
         } else {
@@ -84,12 +100,14 @@ func Eval(v: Value?) -> Value? {
 func Write(v: Value) {
     switch (v) {
         case .Fixnum(let n): print(n)
+        case .True: print("#t")
+        case .False: print("#f")
         default: print("#error")
     }
 }
 
 //
-print("Welcome to Sanguinius v0.1. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.2. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")

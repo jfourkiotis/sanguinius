@@ -12,7 +12,23 @@ You can run `sanguinius` by typing:
 
 	.build/debug/sanguinius
 
+inside the project directory.
+
+### example
+    
+    > 1
+    1
+
+    > #t
+    #t
+
+    > 45 ; a comment
+    45
+
+    > ^C
+
 ### changes
 
+* v0.2   Added booleans
 * v0.1   Support for integers
 
