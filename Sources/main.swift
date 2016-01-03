@@ -4,6 +4,8 @@ enum Value {
     case Fixnum(n: Int)
     case True
     case False
+    case ChrLit(c: CInt)
+    case StrLit(s: String)
 }
 
 func IsFixnum(v: Value) -> Bool {
@@ -18,6 +20,9 @@ let SEMICOLON: CInt = 59
 let MINUS: CInt = 40
 let ZERO: CInt = 48
 let SHARP: CInt = 35 // '#'
+let NEWLINE: CInt = 10 // '\n'
+let SPACE: CInt = 32 // ' '
+let BSLASH: CInt = 92 // '\\'
 let T: CInt = 116 // 't'
 let F: CInt = 102 // 'f'
 
@@ -44,10 +49,50 @@ func _EatWhitespace(stream: UnsafeMutablePointer<FILE>) {
     } while c != EOF
 }
 
+func _EatExpectedStrLit(stream: UnsafeMutablePointer<FILE>, _ lit: String) {
+    for ch in lit.utf8 {
+        let c = getc(stream)
+        if c != CInt(ch) {
+            print("unexpected character \(c)")
+            exit(-1)
+        }
+    }
+}
+
+func _PeekExpectedDelimiter(stream: UnsafeMutablePointer<FILE>) {
+    if !_IsDelimiter(_Peek(stream)) {
+        print("character not followed by delimiter")
+        exit(-1)
+    }
+}
+
 func _Peek(stream: UnsafeMutablePointer<FILE>) -> CInt {
     let c = getc(stream)
     ungetc(c, stream)
     return c
+}
+
+func _ReadChr(stream: UnsafeMutablePointer<FILE>) -> Value {
+    let c = getc(stream)
+    if c == EOF {
+        print("incomplete character literal")
+        exit(-1)
+    } else if c == CInt(UInt8(ascii: "s")) {
+        if _Peek(stream) == CInt(UInt8(ascii: "p")) {
+            _EatExpectedStrLit(stream, "pace")
+            _PeekExpectedDelimiter(stream)
+            return .ChrLit(c: SPACE)
+        }
+        
+    } else if c == CInt(UInt8(ascii: "e")) {
+        if _Peek(stream) == CInt(UInt8(ascii: "e")) {
+            _EatExpectedStrLit(stream, "ewline")
+            _PeekExpectedDelimiter(stream)
+            return .ChrLit(c: NEWLINE)
+        }
+    }
+    _PeekExpectedDelimiter(stream)
+    return .ChrLit(c: c)
 }
 
 func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
@@ -56,13 +101,14 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
     var sign = 1
     var num = 0
 
-    if c == SHARP { /* read a boolean */
+    if c == SHARP { /* read a boolean or character */
         c = getc(stream)
         switch (c) {
             case T: return .True
             case F: return .False
+            case BSLASH: return _ReadChr(stream)
             default: 
-                print("unknown boolean literal")
+                print("unknown boolean or character literal")
                 exit(-1)
             
         }
@@ -85,6 +131,25 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             print("number not followed by delimiter")
             exit(-1)
         }
+    } else if c == CInt(UInt8(ascii: "\"")) { /* read a string */
+        var buffer = String()
+        c = getc(stream)
+        while c != CInt(UInt8(ascii: "\"")) {
+            if c == CInt(UInt8(ascii: "\\")) {
+                c = getc(stream)
+                if c == CInt(UInt8(ascii: "n")) {
+                    c = CInt(UInt8(ascii: "\n"))
+                }
+            }
+
+            if c == EOF {
+                print("non-terminated string literal")
+                exit(-1)
+            }
+            buffer.append(UnicodeScalar(UInt32(c)))
+            c = getc(stream)
+        }
+        return Value.StrLit(s: buffer)
     } else {
         print("bad input. unexpected \(c)")
         exit(-1)
@@ -97,17 +162,46 @@ func Eval(v: Value?) -> Value? {
     return v 
 }
 
+func _WriteChrLit(c: CInt) {
+    print("#\\", terminator:"")
+    switch (c) {
+        case NEWLINE: print("newline")
+        case SPACE: print("space")
+        default:
+            var s = String()
+            s.append(UnicodeScalar(UInt32(c)))
+            print(s)
+    }
+}
+
+func _WriteStrLit(s: String) {
+    print("\"", terminator:"")
+    for c in s.characters {
+        if c == "\n" {
+            print("\\n", terminator:"")
+        } else if c == "\\" {
+            print("\\\\", terminator:"")
+        } else if c == "\"" {
+            print("\\\"", terminator:"")
+        } else {
+            print(c, terminator:"")
+        }
+    }
+    print("\"")
+}
+
 func Write(v: Value) {
     switch (v) {
         case .Fixnum(let n): print(n)
         case .True: print("#t")
         case .False: print("#f")
-        default: print("#error")
+        case .ChrLit(let c): _WriteChrLit(c)
+        case .StrLit(let s): _WriteStrLit(s)
     }
 }
 
 //
-print("Welcome to Sanguinius v0.2. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.4. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
