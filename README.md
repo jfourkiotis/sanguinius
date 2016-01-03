@@ -31,10 +31,14 @@ inside the project directory.
     > "asdf"
     "asdf"
 
+    > ()
+    ()
+
     > ^C
 
 ### changes
 
+* v0.5   Support for the empty list literal
 * v0.4   Added string literals
 * v0.3   Added character literals
 * v0.2   Added booleans

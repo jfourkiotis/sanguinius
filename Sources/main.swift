@@ -6,6 +6,7 @@ enum Value {
     case False
     case ChrLit(c: CInt)
     case StrLit(s: String)
+    case Nil
 }
 
 func IsFixnum(v: Value) -> Bool {
@@ -149,7 +150,16 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             buffer.append(UnicodeScalar(UInt32(c)))
             c = getc(stream)
         }
-        return Value.StrLit(s: buffer)
+        return .StrLit(s: buffer)
+    } else if c == CInt(UInt8(ascii: "(")) {
+        _EatWhitespace(stream)
+        c = getc(stream)
+        if c == CInt(UInt8(ascii: ")")) {
+            return .Nil
+        } else {
+            print("unexpected character \(c). expected ')'")
+            exit(-1)
+        }
     } else {
         print("bad input. unexpected \(c)")
         exit(-1)
@@ -197,11 +207,12 @@ func Write(v: Value) {
         case .False: print("#f")
         case .ChrLit(let c): _WriteChrLit(c)
         case .StrLit(let s): _WriteStrLit(s)
+        case .Nil: print("()")
     }
 }
 
 //
-print("Welcome to Sanguinius v0.4. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.5. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
