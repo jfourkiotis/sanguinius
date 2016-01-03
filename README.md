@@ -34,10 +34,17 @@ inside the project directory.
     > ()
     ()
 
+    > (0 . 1)
+    (0 . 1
+
+    > (0 1 2 3)
+    (0 1 2 3)
+
     > ^C
 
 ### changes
 
+* v0.6   Added pair and list literals
 * v0.5   Support for the empty list literal
 * v0.4   Added string literals
 * v0.3   Added character literals

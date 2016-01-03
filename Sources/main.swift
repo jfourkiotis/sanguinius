@@ -7,6 +7,25 @@ enum Value {
     case ChrLit(c: CInt)
     case StrLit(s: String)
     case Nil
+    indirect case Pair(first: Value, second: Value)
+}
+
+func car(v: Value) -> Value {
+    switch (v) {
+        case .Pair(let f, _): return f
+        default: 
+            print("car: fatal error")
+            exit(-1)
+    }
+}
+
+func cdr(v: Value) -> Value {
+    switch (v) {
+        case .Pair(_, let s): return s
+        default: 
+            print("cdr: fatal error")
+            exit(-1)
+    }
 }
 
 func IsFixnum(v: Value) -> Bool {
@@ -18,7 +37,7 @@ func IsFixnum(v: Value) -> Bool {
 //
 let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
-let MINUS: CInt = 40
+let MINUS: CInt = CInt(UInt8(ascii: "-"))
 let ZERO: CInt = 48
 let SHARP: CInt = 35 // '#'
 let NEWLINE: CInt = 10 // '\n'
@@ -96,6 +115,39 @@ func _ReadChr(stream: UnsafeMutablePointer<FILE>) -> Value {
     return .ChrLit(c: c)
 }
 
+func _ReadPair(stream: UnsafeMutablePointer<FILE>) -> Value? {
+    _EatWhitespace(stream)
+    var c = getc(stream)
+    if c == CInt(UInt8(ascii: ")")) {
+        return .Nil /* the empty list */
+    }
+    ungetc(c, stream)
+
+    let car = Read(stream)
+    _EatWhitespace(stream)
+
+    c = getc(stream)
+    if c == CInt(UInt8(ascii: ".")) {
+        c = _Peek(stream)
+        if !_IsDelimiter(c) {
+            print("dot not followed by delimiter")
+            exit(-1)
+        }
+        let cdr = Read(stream)
+        _EatWhitespace(stream)
+        c = getc(stream)
+        if c != CInt(UInt8(ascii: ")")) {
+            print("where was the trailing right paren?")
+            exit(-1)
+        }
+        return .Pair(first: car as Value!, second: cdr as Value!)
+    } else { /* read list */
+        ungetc(c, stream)
+        let cdr = _ReadPair(stream)
+        return .Pair(first: car as Value!, second: cdr as Value!)
+    }
+}
+
 func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
     _EatWhitespace(stream)
     var c = getc(stream)
@@ -151,17 +203,12 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             c = getc(stream)
         }
         return .StrLit(s: buffer)
-    } else if c == CInt(UInt8(ascii: "(")) {
-        _EatWhitespace(stream)
-        c = getc(stream)
-        if c == CInt(UInt8(ascii: ")")) {
-            return .Nil
-        } else {
-            print("unexpected character \(c). expected ')'")
-            exit(-1)
-        }
+    } else if c == CInt(UInt8(ascii: "(")) { /* read the empty list or pair */
+        return _ReadPair(stream)
     } else {
-        print("bad input. unexpected \(c)")
+        var s = String()
+        s.append(UnicodeScalar(UInt32(c)))
+        print("bad input. unexpected '\(s)'")
         exit(-1)
     }
     print("illegal read state")
@@ -173,46 +220,67 @@ func Eval(v: Value?) -> Value? {
 }
 
 func _WriteChrLit(c: CInt) {
-    print("#\\", terminator:"")
+    _Print("#\\")
     switch (c) {
         case NEWLINE: print("newline")
         case SPACE: print("space")
         default:
             var s = String()
             s.append(UnicodeScalar(UInt32(c)))
-            print(s)
+            _Print(s)
     }
 }
 
 func _WriteStrLit(s: String) {
-    print("\"", terminator:"")
+    _Print("\"")
     for c in s.characters {
         if c == "\n" {
-            print("\\n", terminator:"")
+            _Print("\\n")
         } else if c == "\\" {
-            print("\\\\", terminator:"")
+            _Print("\\\\")
         } else if c == "\"" {
-            print("\\\"", terminator:"")
+            _Print("\\\"")
         } else {
-            print(c, terminator:"")
+            _Print(c)
         }
     }
-    print("\"")
+    _Print("\"")
+}
+
+func _WritePair(first: Value, _ second: Value) {
+    Write(first)
+    switch (second) {
+        case .Pair(let f, let s): 
+            _Print(" ")
+            _WritePair(f, s)
+        case .Nil: () /* do nothing */
+        default: 
+            _Print(" . ")
+            Write(second)
+    }
+}
+
+func _Print<T>(v: T) {
+    print(v, terminator:"")
 }
 
 func Write(v: Value) {
     switch (v) {
-        case .Fixnum(let n): print(n)
-        case .True: print("#t")
-        case .False: print("#f")
+        case .Fixnum(let n): _Print(n)
+        case .True: _Print("#t")
+        case .False: _Print("#f")
         case .ChrLit(let c): _WriteChrLit(c)
         case .StrLit(let s): _WriteStrLit(s)
-        case .Nil: print("()")
+        case .Nil: _Print("()")
+        case .Pair(let f, let s): 
+            _Print("(")
+            _WritePair(f, s)
+            _Print(")")
     }
 }
 
 //
-print("Welcome to Sanguinius v0.5. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.6. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
