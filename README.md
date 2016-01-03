@@ -35,7 +35,7 @@ inside the project directory.
     ()
 
     > (0 . 1)
-    (0 . 1
+    (0 . 1)
 
     > (0 1 2 3)
     (0 1 2 3)
@@ -50,4 +50,3 @@ inside the project directory.
 * v0.3   Added character literals
 * v0.2   Added booleans
 * v0.1   Support for integers
-
