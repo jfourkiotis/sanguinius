@@ -34,10 +34,19 @@ inside the project directory.
     (0 1 2 3)
     > (quote asdf)
     asdf
+    > (define a 1)
+    ok
+    > a
+    1
+    > (set! a 2)
+    ok
+    > a
+    2
     > ^C
 
 ### changes
 
+* v0.9   Added environments, variables, definitions and assignments
 * v0.8   Added quoted form
 * v0.7   Added symbols
 * v0.6   Added pair and list literals

@@ -294,7 +294,31 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
 }
 
 //
-let Quote = Value.Symbol(s: "quote")
+class Environment {
+    let base: Environment?
+    let frame: [String : Value] = [:]
+
+    init(base: Environment?) {
+        self.base = base
+    }
+
+    static func Extend(env: Environment) -> Environment {
+        return Environment(base: env)
+    }
+
+    static func Setup() -> Environment {
+        return Extend(Empty) 
+    }
+
+    static let Empty  = Environment(base: nil)
+    static let Global = Environment.Setup()
+}
+
+
+let Quote  = Value.Symbol(s: "quote" )
+let Define = Value.Symbol(s: "define")
+let OK     = Value.Symbol(s: "ok"    )
+let SetV   = Value.Symbol(s: "set!"  )
 
 func _IsSelfEvaluating(v: Value) -> Bool {
     return IsBoolean(v) || IsFixnum(v) || IsChrLit(v) || IsStrLit(v)
@@ -315,6 +339,10 @@ func _IsQuoted(expression: Value) -> Bool {
 func _QuotationText(quoted: Value) -> Value {
     return cadr(quoted)
 }
+
+//
+
+//
 
 func Eval(v: Value) -> Value {
     if _IsSelfEvaluating(v) {
