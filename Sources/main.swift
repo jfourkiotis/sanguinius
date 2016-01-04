@@ -419,7 +419,7 @@ func Write(v: Value) {
 }
 
 //
-print("Welcome to Sanguinius v0.8. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.9. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
