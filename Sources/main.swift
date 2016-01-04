@@ -8,6 +8,7 @@ enum Value {
     case StrLit(s: String)
     case Nil
     indirect case Pair(first: Value, second: Value)
+    case Symbol(s: String)
 }
 
 func car(v: Value) -> Value {
@@ -34,10 +35,18 @@ func IsFixnum(v: Value) -> Bool {
         default: return false
     }
 }
+
+func IsSymbol(v: Value) -> Bool {
+    switch (v) {
+        case .Symbol(_): return true
+        default: return false
+    }
+}
 //
 let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
-let MINUS: CInt = CInt(UInt8(ascii: "-"))
+let MINUS = CInt(UInt8(ascii: "-"))
+let PLUS = CInt(UInt8(ascii: "+"))
 let ZERO: CInt = 48
 let SHARP: CInt = 35 // '#'
 let NEWLINE: CInt = 10 // '\n'
@@ -46,10 +55,24 @@ let BSLASH: CInt = 92 // '\\'
 let T: CInt = 116 // 't'
 let F: CInt = 102 // 'f'
 
+let STAR  = CInt(UInt8(ascii: "*"))
+let SLASH = CInt(UInt8(ascii: "/"))
+let GT    = CInt(UInt8(ascii: ">"))
+let LT    = CInt(UInt8(ascii: "<"))
+let EQUALS = CInt(UInt8(ascii: "="))
+let QMARK = CInt(UInt8(ascii: "?"))
+let MARK  = CInt(UInt8(ascii: "!"))
+
 func _IsDelimiter(c: CInt) -> Bool {
     return isspace(c) != 0    || c == EOF /* -1  */ || 
            c == 40 /* '(' */  || c == 41  /* ')' */ ||
            c == 34 /* '"' */  || c == SEMICOLON  /* ';' */
+}
+
+func _IsInitial(c: CInt) -> Bool {
+    return isalpha(c) != 0    || c == STAR || c == SLASH  ||
+           c == LT            || c == GT   || c == EQUALS ||
+           c == QMARK         || c == MARK
 }
 
 func _EatWhitespace(stream: UnsafeMutablePointer<FILE>) {
@@ -203,6 +226,15 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             c = getc(stream)
         }
         return .StrLit(s: buffer)
+    } else if _IsInitial(c) || ((c == PLUS || c == MINUS) && _IsDelimiter(_Peek(stream))) { /* read a symbol */
+        var buffer = String()
+        
+        while _IsInitial(c) || isdigit(c) != 0 || c == PLUS || c == MINUS {
+            buffer.append(UnicodeScalar(UInt32(c)))
+            c = getc(stream)
+        }
+
+        return .Symbol(s: buffer)
     } else if c == CInt(UInt8(ascii: "(")) { /* read the empty list or pair */
         return _ReadPair(stream)
     } else {
@@ -276,6 +308,7 @@ func Write(v: Value) {
             _Print("(")
             _WritePair(f, s)
             _Print(")")
+        case .Symbol(let s): _Print(s)
     }
 }
 

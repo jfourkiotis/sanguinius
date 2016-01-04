@@ -18,32 +18,27 @@ inside the project directory.
     
     > 1
     1
-
     > #t
     #t
-
     > 45 ; a comment
     45
-
     > #\c
     #\c
-
     > "asdf"
     "asdf"
-
     > ()
     ()
-
     > (0 . 1)
     (0 . 1)
-
     > (0 1 2 3)
     (0 1 2 3)
-
+    > asdf
+    asdf
     > ^C
 
 ### changes
 
+* v0.7   Added symbols
 * v0.6   Added pair and list literals
 * v0.5   Support for the empty list literal
 * v0.4   Added string literals
