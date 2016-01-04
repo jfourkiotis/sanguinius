@@ -26,18 +26,19 @@ inside the project directory.
     #\c
     > "asdf"
     "asdf"
-    > ()
+    > (quote ())
     ()
-    > (0 . 1)
+    > (quote (0 . 1))
     (0 . 1)
-    > (0 1 2 3)
+    > (quote (0 1 2 3))
     (0 1 2 3)
-    > asdf
+    > (quote asdf)
     asdf
     > ^C
 
 ### changes
 
+* v0.8   Added quoted form
 * v0.7   Added symbols
 * v0.6   Added pair and list literals
 * v0.5   Support for the empty list literal

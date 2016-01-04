@@ -11,6 +11,15 @@ enum Value {
     case Symbol(s: String)
 }
 
+func == (a: Value, b: Value) -> Bool {
+    switch (a, b) {
+        case (.Symbol(let s1), .Symbol(let s2)) where s1 == s2: return true
+        default: return false
+    }
+}
+
+//
+
 func car(v: Value) -> Value {
     switch (v) {
         case .Pair(let f, _): return f
@@ -29,6 +38,10 @@ func cdr(v: Value) -> Value {
     }
 }
 
+func cadr(v: Value) -> Value {
+    return car(cdr(v))
+}
+
 func IsFixnum(v: Value) -> Bool {
     switch (v) {
         case .Fixnum(_): return true
@@ -42,6 +55,36 @@ func IsSymbol(v: Value) -> Bool {
         default: return false
     }
 }
+
+func IsStrLit(v: Value) -> Bool {
+    switch (v) {
+        case .StrLit(_): return true
+        default: return false
+    }
+}
+
+func IsChrLit(v: Value) -> Bool {
+    switch (v) {
+        case .ChrLit(_): return true
+        default: return false
+    }
+}
+
+func IsPair(v: Value) -> Bool {
+    switch (v) {
+        case .Pair(_, _): return true
+        default: return false
+    }
+}
+
+func IsBoolean(v: Value) -> Bool {
+    switch (v) {
+        case .True: return true
+        case .False: return true
+        default: return false
+    }
+}
+
 //
 let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
@@ -237,6 +280,9 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
         return .Symbol(s: buffer)
     } else if c == CInt(UInt8(ascii: "(")) { /* read the empty list or pair */
         return _ReadPair(stream)
+    } else if c == CInt(UInt8(ascii: "'")) {
+        let v = Read(stream)
+        return .Pair(first: Quote, second: .Pair(first: v as Value!, second: .Nil))
     } else {
         var s = String()
         s.append(UnicodeScalar(UInt32(c)))
@@ -247,10 +293,42 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
     exit(-1)
 }
 
-func Eval(v: Value?) -> Value? {
+//
+let Quote = Value.Symbol(s: "quote")
+
+func _IsSelfEvaluating(v: Value) -> Bool {
+    return IsBoolean(v) || IsFixnum(v) || IsChrLit(v) || IsStrLit(v)
+}
+
+func _IsTagged(expression: Value, tag: Value) -> Bool {
+   if IsPair(expression) {
+        let first = car(expression)
+        return IsSymbol(first) && (first == tag)
+   }
+   return false
+}
+
+func _IsQuoted(expression: Value) -> Bool {
+    return _IsTagged(expression, tag: Quote)
+}
+
+func _QuotationText(quoted: Value) -> Value {
+    return cadr(quoted)
+}
+
+func Eval(v: Value) -> Value {
+    if _IsSelfEvaluating(v) {
+        return v
+    } else if (_IsQuoted(v)) {
+        return _QuotationText(v)
+    } else {
+        print("cannot eval unknown expression type")
+        exit(-1)
+    }
     return v 
 }
 
+//
 func _WriteChrLit(c: CInt) {
     _Print("#\\")
     switch (c) {
@@ -313,12 +391,12 @@ func Write(v: Value) {
 }
 
 //
-print("Welcome to Sanguinius v0.7. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.8. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
-    if let v = Eval(Read(stdin)) {
-        Write(v)
+    if let v = Read(stdin) {
+        Write(Eval(v))
     }
     print("")
 
