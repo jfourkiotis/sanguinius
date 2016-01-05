@@ -42,10 +42,13 @@ inside the project directory.
     ok
     > a
     2
+    > (if #t 1 2)
+    1
     > ^C
 
 ### changes
 
+* v0.10  Support for the if-form
 * v0.9   Added environments, variables, definitions and assignments
 * v0.8   Added quoted form
 * v0.7   Added symbols

@@ -14,6 +14,8 @@ enum Value {
 func == (a: Value, b: Value) -> Bool {
     switch (a, b) {
         case (.Symbol(let s1), .Symbol(let s2)) where s1 == s2: return true
+        case (.True, .True): return true
+        case (.Nil, .Nil): return true
         default: return false
     }
 }
@@ -42,6 +44,23 @@ func cadr(v: Value) -> Value {
     return car(cdr(v))
 }
 
+func cddr(v: Value) -> Value {
+    return cdr(cdr(v))
+}
+
+func caddr(v: Value) -> Value {
+    return cadr(cdr(v))
+}
+
+func cdddr(v: Value) -> Value {
+    return cdr(cddr(v))
+}
+
+func cadddr(v: Value) -> Value {
+    return car(cdddr(v))
+}
+
+//
 func IsFixnum(v: Value) -> Bool {
     switch (v) {
         case .Fixnum(_): return true
@@ -296,10 +315,33 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
 //
 class Environment {
     let base: Environment?
-    let frame: [String : Value] = [:]
+    var frame: [String : Value] = [:]
 
     init(base: Environment?) {
         self.base = base
+    }
+    
+    func EnclosingEnvironment() -> Environment? {
+        return base
+    }
+    
+    func LookupValue(name: String) -> Value? {
+        return frame[name]
+    }
+    
+    func SetVariableValue(name: String, value: Value) {
+        if self === Environment.Empty {
+            print("unbound varible '\(name)'")
+            exit(-1)
+        } else if frame[name] != nil {
+            frame[name] = value
+        } else if base != nil {
+            base!.SetVariableValue(name, value: value)
+        }
+    }
+    
+    func DefineVariable(name: String, value: Value) {
+        frame[name] = value
     }
 
     static func Extend(env: Environment) -> Environment {
@@ -319,6 +361,7 @@ let Quote  = Value.Symbol(s: "quote" )
 let Define = Value.Symbol(s: "define")
 let OK     = Value.Symbol(s: "ok"    )
 let SetV   = Value.Symbol(s: "set!"  )
+let IF     = Value.Symbol(s: "if"    )
 
 func _IsSelfEvaluating(v: Value) -> Bool {
     return IsBoolean(v) || IsFixnum(v) || IsChrLit(v) || IsStrLit(v)
@@ -341,19 +384,105 @@ func _QuotationText(quoted: Value) -> Value {
 }
 
 //
+func _IsVariable(expression: Value) -> String? {
+    if case .Symbol(let s) = expression {
+        return s
+    }
+    return nil
+}
+
+func _IsAssignment(form: Value) -> Bool {
+    return _IsTagged(form, tag: SetV)
+}
+
+func _AssignmentVarName(assignment: Value) -> String {
+    switch cadr(assignment) {
+    case .Symbol(let s): return s
+    default:
+        print("invalid variable name")
+        exit(-1)
+    }
+}
+
+func _AssignmentValue(assignment: Value) -> Value {
+    return cadr(cdr(assignment))
+}
+
+func _EvalAssignment(assignment: Value, env: Environment) -> Value {
+    env.SetVariableValue(_AssignmentVarName(assignment), value: Eval(_AssignmentValue(assignment), env:  env))
+    return OK
+}
+
+func _IsDefinition(form: Value) -> Bool {
+    return _IsTagged(form, tag: Define)
+}
+
+func _DefinitionVariableName(definition: Value) -> String {
+    switch cadr(definition) {
+    case .Symbol(let s): return s
+    default:
+        print("invalid variable name")
+        exit(-1)
+    }
+}
+
+func _DefinitionValue(definition: Value) -> Value {
+    return cadr(cdr(definition))
+}
+
+func _EvalDefinition(form: Value, env: Environment) -> Value {
+    env.DefineVariable(_DefinitionVariableName(form), value: Eval(_DefinitionValue(form), env:  env))
+    return OK
+}
+//
+func _IsIf(form: Value) -> Bool {
+    return _IsTagged(form, tag: IF)
+}
+
+func _IfPredicate(form: Value) -> Value {
+    return cadr(form)
+}
+
+func _IfConsequent(form: Value) -> Value {
+    return caddr(form)
+}
+
+func _IfAlternative(form: Value) -> Value {
+    if cdddr(form) == .Nil {
+        return .False
+    } else {
+        return cadddr(form)
+    }
+}
 
 //
 
-func Eval(v: Value) -> Value {
-    if _IsSelfEvaluating(v) {
-        return v
-    } else if (_IsQuoted(v)) {
-        return _QuotationText(v)
-    } else {
-        print("cannot eval unknown expression type")
-        exit(-1)
+func Eval(v: Value, env: Environment) -> Value {
+    var exp = v
+    while true {
+        if _IsSelfEvaluating(exp) {
+            return exp
+        } else if let name = _IsVariable(exp) {
+            switch (env.LookupValue(name)) {
+            case .Some(let value): return value
+            case .None:
+                print("unbound variable '\(name)'")
+                exit(-1)
+            }
+        } else if _IsAssignment(exp) {
+            return _EvalAssignment(exp, env: env)
+        } else if _IsDefinition(exp) {
+            return _EvalDefinition(exp, env: env)
+        } else if _IsIf(exp) {
+            exp = Eval(_IfPredicate(exp), env: env) == .True ? _IfConsequent(exp) : _IfAlternative(exp)
+            continue // tailcall
+        } else if (_IsQuoted(exp)) {
+            return _QuotationText(exp)
+        } else {
+            print("cannot eval unknown expression type")
+            exit(-1)
+        }
     }
-    return v 
 }
 
 //
@@ -419,12 +548,12 @@ func Write(v: Value) {
 }
 
 //
-print("Welcome to Sanguinius v0.9. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.10. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
     if let v = Read(stdin) {
-        Write(Eval(v))
+        Write(Eval(v, env: Environment.Global))
     }
     print("")
 
