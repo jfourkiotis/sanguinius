@@ -44,10 +44,15 @@ inside the project directory.
     2
     > (if #t 1 2)
     1
+    > (+ 1 2 3)
+    6
+    > +
+    #<procedure>
     > ^C
 
 ### changes
 
+* v0.11  Added the first primitive procedure, `+`
 * v0.10  Support for the if-form
 * v0.9   Added environments, variables, definitions and assignments
 * v0.8   Added quoted form

@@ -9,6 +9,7 @@ enum Value {
     case Nil
     indirect case Pair(first: Value, second: Value)
     case Symbol(s: String)
+    case PrimitiveProc(p: Value -> Value)
 }
 
 func == (a: Value, b: Value) -> Bool {
@@ -363,6 +364,7 @@ let OK     = Value.Symbol(s: "ok"    )
 let SetV   = Value.Symbol(s: "set!"  )
 let IF     = Value.Symbol(s: "if"    )
 
+
 func _IsSelfEvaluating(v: Value) -> Bool {
     return IsBoolean(v) || IsFixnum(v) || IsChrLit(v) || IsStrLit(v)
 }
@@ -457,6 +459,8 @@ func _IfAlternative(form: Value) -> Value {
 
 //
 
+//
+
 func Eval(v: Value, env: Environment) -> Value {
     var exp = v
     while true {
@@ -476,6 +480,16 @@ func Eval(v: Value, env: Environment) -> Value {
         } else if _IsIf(exp) {
             exp = Eval(_IfPredicate(exp), env: env) == .True ? _IfConsequent(exp) : _IfAlternative(exp)
             continue // tailcall
+        } else if _IsApplication(exp) {
+            let procedure = Eval(_ApplicationOperator(exp), env: env)
+            let arguments = _EvalOperands(_ApplicationOperands(exp), env: env)
+            if case .PrimitiveProc(let proc) = procedure {
+                return proc(arguments)
+            } else 
+            {
+                print("invalid form")
+                exit(-1)
+            }
         } else if (_IsQuoted(exp)) {
             return _QuotationText(exp)
         } else {
@@ -544,11 +558,64 @@ func Write(v: Value) {
             _WritePair(f, s)
             _Print(")")
         case .Symbol(let s): _Print(s)
+        case .PrimitiveProc(_): _Print("#<procedure>")
     }
 }
 
+// 
+func _IsApplication(form: Value) -> Bool {
+    return IsPair(form)
+}
+
+func _ApplicationOperator(form: Value) -> Value {
+    return car(form)
+}
+
+func _ApplicationOperands(form: Value) -> Value {
+    return cdr(form)
+}
+
+func _ApplicationOperandsEmpty(operands: Value) -> Bool {
+    return operands == .Nil
+}
+
+func _FirstOperand(operands: Value) -> Value {
+    return car(operands)
+}
+
+func _RestOperands(operands: Value) -> Value {
+    return cdr(operands)
+}
+
+func _EvalOperands(operands: Value, env: Environment) -> Value {
+    if operands == .Nil {
+        return .Nil
+    }
+    return .Pair(first:   Eval(_FirstOperand(operands), env: env), 
+                 second: _EvalOperands(_RestOperands(operands), env: env))
+}
+
 //
-print("Welcome to Sanguinius v0.10. Use ctrl-c to exit")
+func _ProcAdd(arguments: Value) -> Value {
+    var result = 0
+    var cur_args = arguments
+    while !(cur_args == Value.Nil) {
+        let first = car(cur_args)
+        if case .Fixnum(let n) = first {
+            result += n
+        } else {
+            print("invalid operand (+)")
+            exit(-1)
+        }
+        cur_args = cdr(cur_args)
+    }
+    return .Fixnum(n: result)
+}
+
+Environment.Global.DefineVariable("+", value: .PrimitiveProc(p: _ProcAdd))
+
+//
+print("Welcome to Sanguinius v0.11. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
