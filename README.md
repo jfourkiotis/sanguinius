@@ -1,6 +1,6 @@
 ## Sanguinius
 
-`sanguinius` is a basic **scheme** interpreter written in `swift`. In order to build `sanguinius` from sources, the following are required:
+`sanguinius` is an experimental half-finished basic **scheme** interpreter written in `swift`. In order to build `sanguinius` from sources, the following are required:
 
 * swift 2.2-dev
 
@@ -13,6 +13,8 @@ You can run `sanguinius` by typing:
 	.build/debug/sanguinius
 
 inside the project directory.
+
+** The implementation is completely broken and very slow **
 
 ### example
     
