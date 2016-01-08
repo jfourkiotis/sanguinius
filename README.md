@@ -52,6 +52,27 @@ inside the project directory.
 
 ### changes
 
+* v0.12  More primitive procedures
+    - `null?`
+    - `boolean?`
+    - `symbol?`
+    - `integer?`
+    - `char?`
+    - `string?`
+    - `pair?`
+    - `procedure?`
+    - `number->string`
+    - `string->number`
+    - `symbol->string`
+    - `string->symbol`
+    - `char->integer`
+    - `integer->char`
+    - `cons`
+    - `car`
+    - `cdr`
+    - `list`
+    - `eq?`
+
 * v0.11  Added the first primitive procedure, `+`
 * v0.10  Support for the if-form
 * v0.9   Added environments, variables, definitions and assignments

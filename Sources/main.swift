@@ -14,9 +14,16 @@ enum Value {
 
 func == (a: Value, b: Value) -> Bool {
     switch (a, b) {
+        case (.Fixnum(let n1), .Fixnum(let n2)) where n1 == n2: return true
         case (.Symbol(let s1), .Symbol(let s2)) where s1 == s2: return true
+        case (.ChrLit(let c1), .ChrLit(let c2)) where c1 == c2: return true
+        case (.StrLit(let s1), .StrLit(let s2)) where s1 == s2: return true
         case (.True, .True): return true
         case (.Nil, .Nil): return true
+        // very slow
+        case (.Pair(first: let f1, second: let s1), .Pair(first: let f2, second: let s2)) where f1 == f2 && s1 == s2: return true
+        // equality for functions is not supported in swift
+        case (.PrimitiveProc(_), .PrimitiveProc(_)): fallthrough
         default: return false
     }
 }
@@ -97,6 +104,13 @@ func IsPair(v: Value) -> Bool {
     }
 }
 
+func IsProcedure(v: Value) -> Bool {
+    switch (v) {
+        case .PrimitiveProc(_): return true
+        default: return false
+    }
+}
+
 func IsBoolean(v: Value) -> Bool {
     switch (v) {
         case .True: return true
@@ -139,20 +153,21 @@ func _IsInitial(c: CInt) -> Bool {
 }
 
 func _EatWhitespace(stream: UnsafeMutablePointer<FILE>) {
-    var c: CInt = EOF
-    repeat {    
-        c = getc(stream)
+    var c = getc(stream)
+    while c != EOF {
         if isspace(c) != 0 {
+            c = getc(stream)
             continue
-        } else if (c == SEMICOLON) { /* comments are whitespace also */
+        } else if c == SEMICOLON { /* comments are whitespace also */
             repeat {
                 c = getc(stream)
             } while c != EOF && c != END_OF_LINE
+            c = getc(stream)
             continue
         }
         ungetc(c, stream)
         break
-    } while c != EOF
+    } 
 }
 
 func _EatExpectedStrLit(stream: UnsafeMutablePointer<FILE>, _ lit: String) {
@@ -213,7 +228,7 @@ func _ReadPair(stream: UnsafeMutablePointer<FILE>) -> Value? {
     _EatWhitespace(stream)
 
     c = getc(stream)
-    if c == CInt(UInt8(ascii: ".")) {
+    if c == CInt(UInt8(ascii: ".")) { /* read improper list */
         c = _Peek(stream)
         if !_IsDelimiter(c) {
             print("dot not followed by delimiter")
@@ -296,7 +311,7 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             buffer.append(UnicodeScalar(UInt32(c)))
             c = getc(stream)
         }
-
+        ungetc(c, stream)
         return .Symbol(s: buffer)
     } else if c == CInt(UInt8(ascii: "(")) { /* read the empty list or pair */
         return _ReadPair(stream)
@@ -473,6 +488,8 @@ func Eval(v: Value, env: Environment) -> Value {
                 print("unbound variable '\(name)'")
                 exit(-1)
             }
+        } else if (_IsQuoted(exp)) {
+            return _QuotationText(exp)
         } else if _IsAssignment(exp) {
             return _EvalAssignment(exp, env: env)
         } else if _IsDefinition(exp) {
@@ -490,8 +507,6 @@ func Eval(v: Value, env: Environment) -> Value {
                 print("invalid form")
                 exit(-1)
             }
-        } else if (_IsQuoted(exp)) {
-            return _QuotationText(exp)
         } else {
             print("cannot eval unknown expression type")
             exit(-1)
@@ -612,10 +627,89 @@ func _ProcAdd(arguments: Value) -> Value {
     return .Fixnum(n: result)
 }
 
+func _ProcIsBoolean(arguments: Value) -> Value {
+    let first = car(arguments)
+    return (first == .True || first == .False) ? .True : .False
+}
+
+func _ProcCharToInteger(arguments: Value) -> Value {
+    if case .ChrLit(let c) = car(arguments) {
+        return .Fixnum(n: Int(c)) 
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+func _ProcIntegerToChar(arguments: Value) -> Value {
+    if case .Fixnum(let n) = car(arguments) {
+        return .ChrLit(c: CInt(UInt8(ascii: UnicodeScalar(n))))
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+func _ProcNumberToString(arguments: Value) -> Value {
+    if case .Fixnum(let n) = car(arguments) {
+        return .StrLit(s: String(n))
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+func _ProcStringToNumber(arguments: Value) -> Value {
+    if case .StrLit(let s) = car(arguments) {
+        if let n = Int(s) {
+            return .Fixnum(n: n)
+        }
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+func _ProcSymbolToString(arguments: Value) -> Value {
+    if case .Symbol(let s) = car(arguments) {
+        return .StrLit(s: s)
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+func _ProcStringToSymbol(arguments: Value) -> Value {
+    if case .StrLit(let s) = car(arguments) {
+        return .Symbol(s: s)
+    }
+    print("invalid arguments")
+    exit(-1)
+}
+
+Environment.Global.DefineVariable("null?"     , value: .PrimitiveProc(p: {car($0) == .Nil ? .True : .False}))
+Environment.Global.DefineVariable("boolean?"  , value: .PrimitiveProc(p: _ProcIsBoolean))
+Environment.Global.DefineVariable("symbol?"   , value: .PrimitiveProc(p: {IsSymbol(car($0)) ? .True : .False }))
+Environment.Global.DefineVariable("integer?"  , value: .PrimitiveProc(p: {IsFixnum(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("character?", value: .PrimitiveProc(p: {IsChrLit(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("string?"   , value: .PrimitiveProc(p: {IsStrLit(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("pair?"     , value: .PrimitiveProc(p: {IsPair(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("procedure?", value: .PrimitiveProc(p: {IsProcedure(car($0)) ? .True : .False}))
+
+Environment.Global.DefineVariable("char->integer" , value: .PrimitiveProc(p: _ProcCharToInteger))
+Environment.Global.DefineVariable("integer->char" , value: .PrimitiveProc(p: _ProcIntegerToChar))
+Environment.Global.DefineVariable("number->string", value: .PrimitiveProc(p: _ProcNumberToString))
+Environment.Global.DefineVariable("string->number", value: .PrimitiveProc(p: _ProcStringToNumber))
+Environment.Global.DefineVariable("symbol->string", value: .PrimitiveProc(p: _ProcSymbolToString))
+Environment.Global.DefineVariable("string->symbol", value: .PrimitiveProc(p: _ProcStringToSymbol))
+
 Environment.Global.DefineVariable("+", value: .PrimitiveProc(p: _ProcAdd))
 
+
+Environment.Global.DefineVariable("cons", value: .PrimitiveProc(p: { .Pair(first: car($0), second: cadr($0)) }))
+Environment.Global.DefineVariable("car" , value: .PrimitiveProc(p: { car($0) }))
+Environment.Global.DefineVariable("cdr" , value: .PrimitiveProc(p: { cdr($0) }))
+Environment.Global.DefineVariable("list", value: .PrimitiveProc(p: { $0 }))
+Environment.Global.DefineVariable("eq?" , value: .PrimitiveProc(p: { car($0) == cadr($0) ? .True : .False }))
+
+
 //
-print("Welcome to Sanguinius v0.11. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.12. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
