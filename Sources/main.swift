@@ -627,6 +627,30 @@ func _ProcAdd(arguments: Value) -> Value {
     return .Fixnum(n: result)
 }
 
+func _ProcNumEq(arguments: Value) -> Value {
+    var v = 0
+    var cur_args = arguments
+    switch car(cur_args) {
+        case .Fixnum(let n): v = n
+        default:
+            print("invalid arguments")
+            exit(-1)
+    }
+
+    cur_args = cdr(cur_args)
+    while !(cur_args == .Nil) {
+        switch car(cur_args) {
+            case .Fixnum(let n): if v != n { return .False }
+            default:
+                print("invalid arguments")
+                exit(-1)
+        }
+        cur_args = cdr(cur_args)
+    }
+    
+    return .True
+}
+
 func _ProcIsBoolean(arguments: Value) -> Value {
     let first = car(arguments)
     return (first == .True || first == .False) ? .True : .False
@@ -699,6 +723,7 @@ Environment.Global.DefineVariable("symbol->string", value: .PrimitiveProc(p: _Pr
 Environment.Global.DefineVariable("string->symbol", value: .PrimitiveProc(p: _ProcStringToSymbol))
 
 Environment.Global.DefineVariable("+", value: .PrimitiveProc(p: _ProcAdd))
+Environment.Global.DefineVariable("=", value: .PrimitiveProc(p: _ProcNumEq))
 
 
 Environment.Global.DefineVariable("cons", value: .PrimitiveProc(p: { .Pair(first: car($0), second: cadr($0)) }))

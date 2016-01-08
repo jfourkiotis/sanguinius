@@ -67,6 +67,7 @@ inside the project directory.
     - `string->symbol`
     - `char->integer`
     - `integer->char`
+    - `=`
     - `cons`
     - `car`
     - `cdr`
