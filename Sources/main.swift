@@ -1,5 +1,71 @@
 import Darwin.C;
 
+class Environment {
+    let base: Environment?
+    var frame: [String : Value] = [:]
+
+    init(base: Environment?) {
+        self.base = base
+    }
+    
+    func EnclosingEnvironment() -> Environment? {
+        return base
+    }
+    
+    func LookupValue(name: String) -> Value? {
+        let lookup = frame[name]
+        if lookup != nil {
+            return lookup!
+        } else if base != nil {
+            return base!.LookupValue(name)
+        } else {
+            print("unbound variable '(name)'")
+            exit(-1)
+        }
+    }
+    
+    func SetVariableValue(name: String, value: Value) {
+        if self === Environment.Empty {
+            print("unbound variable '\(name)'")
+            exit(-1)
+        } else if frame[name] != nil {
+            frame[name] = value
+        } else if base != nil {
+            base!.SetVariableValue(name, value: value)
+        }
+    }
+    
+    func DefineVariable(name: String, value: Value) {
+        frame[name] = value
+    }
+
+    static func Extend(params: Value, args: Value, env: Environment) -> Environment {
+        let new_env = Environment(base: env)
+
+        var cur_params = params
+        var cur_args = args
+        while !(cur_params == .Nil) {
+            if case .Symbol(let s) = car(cur_params) {
+                new_env.DefineVariable(s, value: car(cur_args))
+            } else {
+                print("invalid param")
+                exit(-1)
+            }
+            cur_params = cdr(cur_params)
+            cur_args = cdr(cur_args)
+        }
+
+        return new_env
+    }
+
+    static func Setup() -> Environment {
+        return Extend(.Nil, args: .Nil, env: Empty) 
+    }
+
+    static let Empty  = Environment(base: nil)
+    static let Global = Environment.Setup()
+}
+
 enum Value {
     case Fixnum(n: Int)
     case True
@@ -10,6 +76,7 @@ enum Value {
     indirect case Pair(first: Value, second: Value)
     case Symbol(s: String)
     case PrimitiveProc(p: Value -> Value)
+    indirect case CompoundProc(params: Value, body: Value, env: Environment)
 }
 
 func == (a: Value, b: Value) -> Bool {
@@ -56,12 +123,20 @@ func cddr(v: Value) -> Value {
     return cdr(cdr(v))
 }
 
+func caadr(v: Value) -> Value {
+    return car(cadr(v))
+}
+
 func caddr(v: Value) -> Value {
     return cadr(cdr(v))
 }
 
 func cdddr(v: Value) -> Value {
     return cdr(cddr(v))
+}
+
+func cdadr(v: Value) -> Value {
+    return cdr(cadr(v))
 }
 
 func cadddr(v: Value) -> Value {
@@ -100,6 +175,13 @@ func IsChrLit(v: Value) -> Bool {
 func IsPair(v: Value) -> Bool {
     switch (v) {
         case .Pair(_, _): return true
+        default: return false
+    }
+}
+
+func IsCompoundProc(v: Value) -> Bool {
+    switch v {
+        case .CompoundProc(_, _, _): return true
         default: return false
     }
 }
@@ -329,55 +411,13 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
 }
 
 //
-class Environment {
-    let base: Environment?
-    var frame: [String : Value] = [:]
-
-    init(base: Environment?) {
-        self.base = base
-    }
-    
-    func EnclosingEnvironment() -> Environment? {
-        return base
-    }
-    
-    func LookupValue(name: String) -> Value? {
-        return frame[name]
-    }
-    
-    func SetVariableValue(name: String, value: Value) {
-        if self === Environment.Empty {
-            print("unbound varible '\(name)'")
-            exit(-1)
-        } else if frame[name] != nil {
-            frame[name] = value
-        } else if base != nil {
-            base!.SetVariableValue(name, value: value)
-        }
-    }
-    
-    func DefineVariable(name: String, value: Value) {
-        frame[name] = value
-    }
-
-    static func Extend(env: Environment) -> Environment {
-        return Environment(base: env)
-    }
-
-    static func Setup() -> Environment {
-        return Extend(Empty) 
-    }
-
-    static let Empty  = Environment(base: nil)
-    static let Global = Environment.Setup()
-}
-
 
 let Quote  = Value.Symbol(s: "quote" )
 let Define = Value.Symbol(s: "define")
 let OK     = Value.Symbol(s: "ok"    )
 let SetV   = Value.Symbol(s: "set!"  )
 let IF     = Value.Symbol(s: "if"    )
+let LAMBDA = Value.Symbol(s: "lambda")
 
 
 func _IsSelfEvaluating(v: Value) -> Bool {
@@ -434,17 +474,51 @@ func _IsDefinition(form: Value) -> Bool {
     return _IsTagged(form, tag: Define)
 }
 
+func _Lambda(params: Value, body: Value) -> Value {
+    return .Pair(first: LAMBDA, second: .Pair(first: params, second: body))
+}
+
+func _IsLambda(expression: Value) -> Bool {
+    return _IsTagged(expression, tag: LAMBDA)
+}
+
+func _LambdaBody(lambda: Value) -> Value {
+    return cddr(lambda)
+}
+
+func _LambdaParams(lambda: Value) -> Value {
+    return cadr(lambda)
+}
+
+func _IsLastExpression(seq: Value) -> Bool {
+    return cdr(seq) == .Nil
+}
+
+func _FirstExpression(seq: Value) -> Value {
+    return car(seq)
+}
+
+func _RestExpressions(seq: Value) -> Value {
+    return cdr(seq)
+}
+
 func _DefinitionVariableName(definition: Value) -> String {
-    switch cadr(definition) {
-    case .Symbol(let s): return s
-    default:
-        print("invalid variable name")
+    if case .Symbol(let s) = cadr(definition) {
+        return s
+    } else if case .Symbol(let s) = caadr(definition) {
+        return s
+    } else {
+        print("invalid definition name")
         exit(-1)
     }
 }
 
 func _DefinitionValue(definition: Value) -> Value {
-    return cadr(cdr(definition))
+    if IsSymbol(cadr(definition)) {
+        return caddr(definition)
+    } else {
+        return _Lambda(cdadr(definition), body: cddr(definition))
+    }
 }
 
 func _EvalDefinition(form: Value, env: Environment) -> Value {
@@ -478,11 +552,12 @@ func _IfAlternative(form: Value) -> Value {
 
 func Eval(v: Value, env: Environment) -> Value {
     var exp = v
+    var cur_env = env
     while true {
         if _IsSelfEvaluating(exp) {
             return exp
         } else if let name = _IsVariable(exp) {
-            switch (env.LookupValue(name)) {
+            switch (cur_env.LookupValue(name)) {
             case .Some(let value): return value
             case .None:
                 print("unbound variable '\(name)'")
@@ -491,17 +566,28 @@ func Eval(v: Value, env: Environment) -> Value {
         } else if (_IsQuoted(exp)) {
             return _QuotationText(exp)
         } else if _IsAssignment(exp) {
-            return _EvalAssignment(exp, env: env)
+            return _EvalAssignment(exp, env: cur_env)
         } else if _IsDefinition(exp) {
-            return _EvalDefinition(exp, env: env)
+            return _EvalDefinition(exp, env: cur_env)
         } else if _IsIf(exp) {
-            exp = Eval(_IfPredicate(exp), env: env) == .True ? _IfConsequent(exp) : _IfAlternative(exp)
+            exp = Eval(_IfPredicate(exp), env: cur_env) == .True ? _IfConsequent(exp) : _IfAlternative(exp)
             continue // tailcall
+        } else if _IsLambda(exp) {
+            return .CompoundProc(params: _LambdaParams(exp), body: _LambdaBody(exp), env: cur_env)
         } else if _IsApplication(exp) {
-            let procedure = Eval(_ApplicationOperator(exp), env: env)
-            let arguments = _EvalOperands(_ApplicationOperands(exp), env: env)
+            let procedure = Eval(_ApplicationOperator(exp), env: cur_env)
+            let arguments = _EvalOperands(_ApplicationOperands(exp), env: cur_env)
             if case .PrimitiveProc(let proc) = procedure {
                 return proc(arguments)
+            } else if case .CompoundProc(let params, let body, let new_env) = procedure {
+                cur_env = Environment.Extend(params, args: arguments, env: new_env) 
+                exp = body
+                while !_IsLastExpression(exp) {
+                    Eval(_FirstExpression(exp), env: cur_env)
+                    exp = _RestExpressions(exp)
+                }
+                exp = _FirstExpression(exp)
+                continue
             } else 
             {
                 print("invalid form")
@@ -574,6 +660,7 @@ func Write(v: Value) {
             _Print(")")
         case .Symbol(let s): _Print(s)
         case .PrimitiveProc(_): _Print("#<procedure>")
+        case .CompoundProc(_): _Print("#<procedure>")
     }
 }
 
@@ -713,7 +800,7 @@ Environment.Global.DefineVariable("integer?"  , value: .PrimitiveProc(p: {IsFixn
 Environment.Global.DefineVariable("character?", value: .PrimitiveProc(p: {IsChrLit(car($0)) ? .True : .False}))
 Environment.Global.DefineVariable("string?"   , value: .PrimitiveProc(p: {IsStrLit(car($0)) ? .True : .False}))
 Environment.Global.DefineVariable("pair?"     , value: .PrimitiveProc(p: {IsPair(car($0)) ? .True : .False}))
-Environment.Global.DefineVariable("procedure?", value: .PrimitiveProc(p: {IsProcedure(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("procedure?", value: .PrimitiveProc(p: {IsProcedure(car($0)) || IsCompoundProc(car($0)) ? .True : .False}))
 
 Environment.Global.DefineVariable("char->integer" , value: .PrimitiveProc(p: _ProcCharToInteger))
 Environment.Global.DefineVariable("integer->char" , value: .PrimitiveProc(p: _ProcIntegerToChar))

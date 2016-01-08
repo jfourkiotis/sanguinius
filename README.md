@@ -48,10 +48,23 @@ inside the project directory.
     6
     > +
     #<procedure>
+    > ((lambda (x) x) 1)
+    1
+    > (define (add x y) (+ x y))
+    ok
+    > (add 1 2)
+    3
+    > add
+    #<procedure>
+    > (define c ((lambda (x) (lambda () x)) 3))
+    ok
+    > (c)
+    3
     > ^C
 
 ### changes
 
+* v0.13  `lambda` the ultimate ! Support for `lambda` functions
 * v0.12  More primitive procedures
     - `null?`
     - `boolean?`
