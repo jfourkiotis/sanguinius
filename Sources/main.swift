@@ -821,7 +821,7 @@ Environment.Global.DefineVariable("eq?" , value: .PrimitiveProc(p: { car($0) == 
 
 
 //
-print("Welcome to Sanguinius v0.12. Use ctrl-c to exit")
+print("Welcome to Sanguinius v0.13. Use ctrl-c to exit")
 
 repeat {
     print("> ", terminator:"")
