@@ -1,4 +1,8 @@
+#if os(Linux)
 import Glibc
+#else
+import Darwin.C
+#endif
 
 class Value {
 	func ToString() -> String {

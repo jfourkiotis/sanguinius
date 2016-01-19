@@ -1,4 +1,8 @@
+#if os(Linux)
 import Glibc;
+#else
+import Darwin.C
+#endif
 
 let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
