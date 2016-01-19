@@ -1,207 +1,5 @@
-import Darwin.C;
+import Glibc;
 
-class Environment {
-    let base: Environment?
-    var frame: [String : Value] = [:]
-
-    init(base: Environment?) {
-        self.base = base
-    }
-    
-    func EnclosingEnvironment() -> Environment? {
-        return base
-    }
-    
-    func LookupValue(name: String) -> Value? {
-        let lookup = frame[name]
-        if lookup != nil {
-            return lookup!
-        } else if base != nil {
-            return base!.LookupValue(name)
-        } else {
-            print("unbound variable '(name)'")
-            exit(-1)
-        }
-    }
-    
-    func SetVariableValue(name: String, value: Value) {
-        if self === Environment.Empty {
-            print("unbound variable '\(name)'")
-            exit(-1)
-        } else if frame[name] != nil {
-            frame[name] = value
-        } else if base != nil {
-            base!.SetVariableValue(name, value: value)
-        }
-    }
-    
-    func DefineVariable(name: String, value: Value) {
-        frame[name] = value
-    }
-
-    static func Extend(params: Value, args: Value, env: Environment) -> Environment {
-        let new_env = Environment(base: env)
-
-        var cur_params = params
-        var cur_args = args
-        while !(cur_params == .Nil) {
-            if case .Symbol(let s) = car(cur_params) {
-                new_env.DefineVariable(s, value: car(cur_args))
-            } else {
-                print("invalid param")
-                exit(-1)
-            }
-            cur_params = cdr(cur_params)
-            cur_args = cdr(cur_args)
-        }
-
-        return new_env
-    }
-
-    static func Setup() -> Environment {
-        return Extend(.Nil, args: .Nil, env: Empty) 
-    }
-
-    static let Empty  = Environment(base: nil)
-    static let Global = Environment.Setup()
-}
-
-enum Value {
-    case Fixnum(n: Int)
-    case True
-    case False
-    case ChrLit(c: CInt)
-    case StrLit(s: String)
-    case Nil
-    indirect case Pair(first: Value, second: Value)
-    case Symbol(s: String)
-    case PrimitiveProc(p: Value -> Value)
-    indirect case CompoundProc(params: Value, body: Value, env: Environment)
-}
-
-func == (a: Value, b: Value) -> Bool {
-    switch (a, b) {
-        case (.Fixnum(let n1), .Fixnum(let n2)) where n1 == n2: return true
-        case (.Symbol(let s1), .Symbol(let s2)) where s1 == s2: return true
-        case (.ChrLit(let c1), .ChrLit(let c2)) where c1 == c2: return true
-        case (.StrLit(let s1), .StrLit(let s2)) where s1 == s2: return true
-        case (.True, .True): return true
-        case (.Nil, .Nil): return true
-        // very slow
-        case (.Pair(first: let f1, second: let s1), .Pair(first: let f2, second: let s2)) where f1 == f2 && s1 == s2: return true
-        // equality for functions is not supported in swift
-        case (.PrimitiveProc(_), .PrimitiveProc(_)): fallthrough
-        default: return false
-    }
-}
-
-//
-
-func car(v: Value) -> Value {
-    switch (v) {
-        case .Pair(let f, _): return f
-        default: 
-            print("car: fatal error")
-            exit(-1)
-    }
-}
-
-func cdr(v: Value) -> Value {
-    switch (v) {
-        case .Pair(_, let s): return s
-        default: 
-            print("cdr: fatal error")
-            exit(-1)
-    }
-}
-
-func cadr(v: Value) -> Value {
-    return car(cdr(v))
-}
-
-func cddr(v: Value) -> Value {
-    return cdr(cdr(v))
-}
-
-func caadr(v: Value) -> Value {
-    return car(cadr(v))
-}
-
-func caddr(v: Value) -> Value {
-    return cadr(cdr(v))
-}
-
-func cdddr(v: Value) -> Value {
-    return cdr(cddr(v))
-}
-
-func cdadr(v: Value) -> Value {
-    return cdr(cadr(v))
-}
-
-func cadddr(v: Value) -> Value {
-    return car(cdddr(v))
-}
-
-//
-func IsFixnum(v: Value) -> Bool {
-    switch (v) {
-        case .Fixnum(_): return true
-        default: return false
-    }
-}
-
-func IsSymbol(v: Value) -> Bool {
-    switch (v) {
-        case .Symbol(_): return true
-        default: return false
-    }
-}
-
-func IsStrLit(v: Value) -> Bool {
-    switch (v) {
-        case .StrLit(_): return true
-        default: return false
-    }
-}
-
-func IsChrLit(v: Value) -> Bool {
-    switch (v) {
-        case .ChrLit(_): return true
-        default: return false
-    }
-}
-
-func IsPair(v: Value) -> Bool {
-    switch (v) {
-        case .Pair(_, _): return true
-        default: return false
-    }
-}
-
-func IsCompoundProc(v: Value) -> Bool {
-    switch v {
-        case .CompoundProc(_, _, _): return true
-        default: return false
-    }
-}
-
-func IsProcedure(v: Value) -> Bool {
-    switch (v) {
-        case .PrimitiveProc(_): return true
-        default: return false
-    }
-}
-
-func IsBoolean(v: Value) -> Bool {
-    switch (v) {
-        case .True: return true
-        case .False: return true
-        default: return false
-    }
-}
-
-//
 let END_OF_LINE: CInt = 10
 let SEMICOLON: CInt = 59
 let MINUS = CInt(UInt8(ascii: "-"))
@@ -222,6 +20,7 @@ let EQUALS = CInt(UInt8(ascii: "="))
 let QMARK = CInt(UInt8(ascii: "?"))
 let MARK  = CInt(UInt8(ascii: "!"))
 
+//
 func _IsDelimiter(c: CInt) -> Bool {
     return isspace(c) != 0    || c == EOF /* -1  */ || 
            c == 40 /* '(' */  || c == 41  /* ')' */ ||
@@ -284,25 +83,25 @@ func _ReadChr(stream: UnsafeMutablePointer<FILE>) -> Value {
         if _Peek(stream) == CInt(UInt8(ascii: "p")) {
             _EatExpectedStrLit(stream, "pace")
             _PeekExpectedDelimiter(stream)
-            return .ChrLit(c: SPACE)
+            return CharacterLit(c: SPACE)
         }
         
     } else if c == CInt(UInt8(ascii: "e")) {
         if _Peek(stream) == CInt(UInt8(ascii: "e")) {
             _EatExpectedStrLit(stream, "ewline")
             _PeekExpectedDelimiter(stream)
-            return .ChrLit(c: NEWLINE)
+            return CharacterLit(c: NEWLINE)
         }
     }
     _PeekExpectedDelimiter(stream)
-    return .ChrLit(c: c)
+    return CharacterLit(c: c)
 }
 
 func _ReadPair(stream: UnsafeMutablePointer<FILE>) -> Value? {
     _EatWhitespace(stream)
     var c = getc(stream)
     if c == CInt(UInt8(ascii: ")")) {
-        return .Nil /* the empty list */
+        return Nil /* the empty list */
     }
     ungetc(c, stream)
 
@@ -323,11 +122,11 @@ func _ReadPair(stream: UnsafeMutablePointer<FILE>) -> Value? {
             print("where was the trailing right paren?")
             exit(-1)
         }
-        return .Pair(first: car as Value!, second: cdr as Value!)
+        return Pair(fst: car as Value!, snd: cdr as Value!)
     } else { /* read list */
         ungetc(c, stream)
         let cdr = _ReadPair(stream)
-        return .Pair(first: car as Value!, second: cdr as Value!)
+        return Pair(fst: car as Value!, snd: cdr as Value!)
     }
 }
 
@@ -340,8 +139,8 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
     if c == SHARP { /* read a boolean or character */
         c = getc(stream)
         switch (c) {
-            case T: return .True
-            case F: return .False
+            case T: return True
+            case F: return False
             case BSLASH: return _ReadChr(stream)
             default: 
                 print("unknown boolean or character literal")
@@ -362,7 +161,7 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
         num = num * sign
         if _IsDelimiter(c) {
             ungetc(c, stream)
-            return .Fixnum(n: num)
+            return Fixnum(n: num)
         } else {
             print("number not followed by delimiter")
             exit(-1)
@@ -385,7 +184,7 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             buffer.append(UnicodeScalar(UInt32(c)))
             c = getc(stream)
         }
-        return .StrLit(s: buffer)
+        return StringLit(s: buffer)
     } else if _IsInitial(c) || ((c == PLUS || c == MINUS) && _IsDelimiter(_Peek(stream))) { /* read a symbol */
         var buffer = String()
         
@@ -394,12 +193,12 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
             c = getc(stream)
         }
         ungetc(c, stream)
-        return .Symbol(s: buffer)
+        return Symbol.CreateSymbol(buffer)
     } else if c == CInt(UInt8(ascii: "(")) { /* read the empty list or pair */
         return _ReadPair(stream)
     } else if c == CInt(UInt8(ascii: "'")) {
         let v = Read(stream)
-        return .Pair(first: Quote, second: .Pair(first: v as Value!, second: .Nil))
+        return Pair(fst: Quote, snd: Pair(fst: v as Value!, snd: Nil))
     } else {
         var s = String()
         s.append(UnicodeScalar(UInt32(c)))
@@ -412,12 +211,12 @@ func Read(stream: UnsafeMutablePointer<FILE>) -> Value? {
 
 //
 
-let Quote  = Value.Symbol(s: "quote" )
-let Define = Value.Symbol(s: "define")
-let OK     = Value.Symbol(s: "ok"    )
-let SetV   = Value.Symbol(s: "set!"  )
-let IF     = Value.Symbol(s: "if"    )
-let LAMBDA = Value.Symbol(s: "lambda")
+let Quote  = Symbol.CreateSymbol("quote" )
+let Define = Symbol.CreateSymbol("define")
+let OK     = Symbol.CreateSymbol("ok"    )
+let SetV   = Symbol.CreateSymbol("set!"  )
+let IF     = Symbol.CreateSymbol("if"    )
+let LAMBDA = Symbol.CreateSymbol("lambda")
 
 
 func _IsSelfEvaluating(v: Value) -> Bool {
@@ -427,7 +226,7 @@ func _IsSelfEvaluating(v: Value) -> Bool {
 func _IsTagged(expression: Value, tag: Value) -> Bool {
    if IsPair(expression) {
         let first = car(expression)
-        return IsSymbol(first) && (first == tag)
+        return IsSymbol(first) && (first === tag)
    }
    return false
 }
@@ -442,9 +241,9 @@ func _QuotationText(quoted: Value) -> Value {
 
 //
 func _IsVariable(expression: Value) -> String? {
-    if case .Symbol(let s) = expression {
-        return s
-    }
+	if let s = expression as? Symbol {
+		return s.sym
+	}
     return nil
 }
 
@@ -453,12 +252,12 @@ func _IsAssignment(form: Value) -> Bool {
 }
 
 func _AssignmentVarName(assignment: Value) -> String {
-    switch cadr(assignment) {
-    case .Symbol(let s): return s
-    default:
-        print("invalid variable name")
-        exit(-1)
-    }
+	if let name = _IsVariable(cadr(assignment)) {
+		return name
+	} else {
+		print("invalid variable name")
+		exit(-1)
+	}
 }
 
 func _AssignmentValue(assignment: Value) -> Value {
@@ -475,7 +274,7 @@ func _IsDefinition(form: Value) -> Bool {
 }
 
 func _Lambda(params: Value, body: Value) -> Value {
-    return .Pair(first: LAMBDA, second: .Pair(first: params, second: body))
+    return Pair(fst: LAMBDA, snd: Pair(fst: params, snd: body))
 }
 
 func _IsLambda(expression: Value) -> Bool {
@@ -491,7 +290,7 @@ func _LambdaParams(lambda: Value) -> Value {
 }
 
 func _IsLastExpression(seq: Value) -> Bool {
-    return cdr(seq) == .Nil
+    return cdr(seq) === Nil
 }
 
 func _FirstExpression(seq: Value) -> Value {
@@ -503,10 +302,10 @@ func _RestExpressions(seq: Value) -> Value {
 }
 
 func _DefinitionVariableName(definition: Value) -> String {
-    if case .Symbol(let s) = cadr(definition) {
-        return s
-    } else if case .Symbol(let s) = caadr(definition) {
-        return s
+    if let s = cadr(definition) as? Symbol {
+        return s.sym
+    } else if let s = caadr(definition) as? Symbol {
+        return s.sym
     } else {
         print("invalid definition name")
         exit(-1)
@@ -539,8 +338,8 @@ func _IfConsequent(form: Value) -> Value {
 }
 
 func _IfAlternative(form: Value) -> Value {
-    if cdddr(form) == .Nil {
-        return .False
+    if cdddr(form) === Nil {
+        return False
     } else {
         return cadddr(form)
     }
@@ -570,18 +369,18 @@ func Eval(v: Value, env: Environment) -> Value {
         } else if _IsDefinition(exp) {
             return _EvalDefinition(exp, env: cur_env)
         } else if _IsIf(exp) {
-            exp = Eval(_IfPredicate(exp), env: cur_env) == .True ? _IfConsequent(exp) : _IfAlternative(exp)
+            exp = Eval(_IfPredicate(exp), env: cur_env) === True ? _IfConsequent(exp) : _IfAlternative(exp)
             continue // tailcall
         } else if _IsLambda(exp) {
-            return .CompoundProc(params: _LambdaParams(exp), body: _LambdaBody(exp), env: cur_env)
+            return CompoundProc(params: _LambdaParams(exp), body: _LambdaBody(exp), env: cur_env)
         } else if _IsApplication(exp) {
             let procedure = Eval(_ApplicationOperator(exp), env: cur_env)
             let arguments = _EvalOperands(_ApplicationOperands(exp), env: cur_env)
-            if case .PrimitiveProc(let proc) = procedure {
-                return proc(arguments)
-            } else if case .CompoundProc(let params, let body, let new_env) = procedure {
-                cur_env = Environment.Extend(params, args: arguments, env: new_env) 
-                exp = body
+			if let prim_proc = procedure as? PrimitiveProc {
+                return prim_proc.proc(arguments)
+			} else if let cproc = procedure as? CompoundProc {
+                cur_env = Environment.Extend(cproc.params, args: arguments, env: cproc.env) 
+                exp = cproc.body
                 while !_IsLastExpression(exp) {
                     Eval(_FirstExpression(exp), env: cur_env)
                     exp = _RestExpressions(exp)
@@ -600,70 +399,6 @@ func Eval(v: Value, env: Environment) -> Value {
     }
 }
 
-//
-func _WriteChrLit(c: CInt) {
-    _Print("#\\")
-    switch (c) {
-        case NEWLINE: print("newline")
-        case SPACE: print("space")
-        default:
-            var s = String()
-            s.append(UnicodeScalar(UInt32(c)))
-            _Print(s)
-    }
-}
-
-func _WriteStrLit(s: String) {
-    _Print("\"")
-    for c in s.characters {
-        if c == "\n" {
-            _Print("\\n")
-        } else if c == "\\" {
-            _Print("\\\\")
-        } else if c == "\"" {
-            _Print("\\\"")
-        } else {
-            _Print(c)
-        }
-    }
-    _Print("\"")
-}
-
-func _WritePair(first: Value, _ second: Value) {
-    Write(first)
-    switch (second) {
-        case .Pair(let f, let s): 
-            _Print(" ")
-            _WritePair(f, s)
-        case .Nil: () /* do nothing */
-        default: 
-            _Print(" . ")
-            Write(second)
-    }
-}
-
-func _Print<T>(v: T) {
-    print(v, terminator:"")
-}
-
-func Write(v: Value) {
-    switch (v) {
-        case .Fixnum(let n): _Print(n)
-        case .True: _Print("#t")
-        case .False: _Print("#f")
-        case .ChrLit(let c): _WriteChrLit(c)
-        case .StrLit(let s): _WriteStrLit(s)
-        case .Nil: _Print("()")
-        case .Pair(let f, let s): 
-            _Print("(")
-            _WritePair(f, s)
-            _Print(")")
-        case .Symbol(let s): _Print(s)
-        case .PrimitiveProc(_): _Print("#<procedure>")
-        case .CompoundProc(_): _Print("#<procedure>")
-    }
-}
-
 // 
 func _IsApplication(form: Value) -> Bool {
     return IsPair(form)
@@ -678,7 +413,7 @@ func _ApplicationOperands(form: Value) -> Value {
 }
 
 func _ApplicationOperandsEmpty(operands: Value) -> Bool {
-    return operands == .Nil
+    return operands === Nil
 }
 
 func _FirstOperand(operands: Value) -> Value {
@@ -690,87 +425,89 @@ func _RestOperands(operands: Value) -> Value {
 }
 
 func _EvalOperands(operands: Value, env: Environment) -> Value {
-    if operands == .Nil {
-        return .Nil
+    if operands === Nil {
+        return Nil
     }
-    return .Pair(first:   Eval(_FirstOperand(operands), env: env), 
-                 second: _EvalOperands(_RestOperands(operands), env: env))
+    return Pair(fst:   Eval(_FirstOperand(operands), env: env), 
+                snd: _EvalOperands(_RestOperands(operands), env: env))
 }
 
 //
 func _ProcAdd(arguments: Value) -> Value {
     var result = 0
     var cur_args = arguments
-    while !(cur_args == Value.Nil) {
+    while !(cur_args === Nil) {
         let first = car(cur_args)
-        if case .Fixnum(let n) = first {
-            result += n
+		if let f = first as? Fixnum {
+            result += f.n
         } else {
             print("invalid operand (+)")
             exit(-1)
         }
         cur_args = cdr(cur_args)
     }
-    return .Fixnum(n: result)
+    return Fixnum(n: result)
 }
 
 func _ProcNumEq(arguments: Value) -> Value {
     var v = 0
     var cur_args = arguments
-    switch car(cur_args) {
-        case .Fixnum(let n): v = n
-        default:
-            print("invalid arguments")
-            exit(-1)
-    }
+	if let f = car(cur_args) as? Fixnum {
+		v = f.n
+	} else {
+		print("invalid arguments")
+		exit(-1)
+	}
 
     cur_args = cdr(cur_args)
-    while !(cur_args == .Nil) {
-        switch car(cur_args) {
-            case .Fixnum(let n): if v != n { return .False }
-            default:
-                print("invalid arguments")
-                exit(-1)
+    while !(cur_args === Nil) {
+		if let f = car(cur_args) as? Fixnum {
+			if f.n != v {
+				return False 
+			}
+		} else {
+			print("invalid arguments")
+			exit(-1)
         }
         cur_args = cdr(cur_args)
     }
     
-    return .True
+    return True
 }
 
 func _ProcIsBoolean(arguments: Value) -> Value {
     let first = car(arguments)
-    return (first == .True || first == .False) ? .True : .False
+    return (first === True || first === False) ? True : False
 }
 
 func _ProcCharToInteger(arguments: Value) -> Value {
-    if case .ChrLit(let c) = car(arguments) {
-        return .Fixnum(n: Int(c)) 
+	if let chrlit = car(arguments) as? CharacterLit {
+		return Fixnum(n: Int(chrlit.literal))
     }
     print("invalid arguments")
     exit(-1)
 }
 
 func _ProcIntegerToChar(arguments: Value) -> Value {
-    if case .Fixnum(let n) = car(arguments) {
-        return .ChrLit(c: CInt(UInt8(ascii: UnicodeScalar(n))))
+    if let f = car(arguments) as? Fixnum {
+        return CharacterLit(c: CInt(UInt8(ascii: UnicodeScalar(f.n))))
     }
     print("invalid arguments")
     exit(-1)
 }
 
 func _ProcNumberToString(arguments: Value) -> Value {
-    if case .Fixnum(let n) = car(arguments) {
-        return .StrLit(s: String(n))
+    if let f = car(arguments) as? Fixnum {
+        return StringLit(s: String(f.n))
     }
     print("invalid arguments")
     exit(-1)
 }
 
 func _ProcStringToNumber(arguments: Value) -> Value {
-    if case .StrLit(let s) = car(arguments) {
-        if let n = Int(s) {
-            return .Fixnum(n: n)
+	if let str = car(arguments) as? StringLit {
+        if let n = Int(str.literal) {
+            return Fixnum(n: n)
         }
     }
     print("invalid arguments")
@@ -778,47 +515,51 @@ func _ProcStringToNumber(arguments: Value) -> Value {
 }
 
 func _ProcSymbolToString(arguments: Value) -> Value {
-    if case .Symbol(let s) = car(arguments) {
-        return .StrLit(s: s)
-    }
+	if let s = car(arguments) as? Symbol {
+		return StringLit(s: s.sym)
+	}
     print("invalid arguments")
     exit(-1)
 }
 
 func _ProcStringToSymbol(arguments: Value) -> Value {
-    if case .StrLit(let s) = car(arguments) {
-        return .Symbol(s: s)
+    if let str = car(arguments) as? StringLit {
+        return Symbol.CreateSymbol(str.literal)
     }
     print("invalid arguments")
     exit(-1)
 }
 
-Environment.Global.DefineVariable("null?"     , value: .PrimitiveProc(p: {car($0) == .Nil ? .True : .False}))
-Environment.Global.DefineVariable("boolean?"  , value: .PrimitiveProc(p: _ProcIsBoolean))
-Environment.Global.DefineVariable("symbol?"   , value: .PrimitiveProc(p: {IsSymbol(car($0)) ? .True : .False }))
-Environment.Global.DefineVariable("integer?"  , value: .PrimitiveProc(p: {IsFixnum(car($0)) ? .True : .False}))
-Environment.Global.DefineVariable("character?", value: .PrimitiveProc(p: {IsChrLit(car($0)) ? .True : .False}))
-Environment.Global.DefineVariable("string?"   , value: .PrimitiveProc(p: {IsStrLit(car($0)) ? .True : .False}))
-Environment.Global.DefineVariable("pair?"     , value: .PrimitiveProc(p: {IsPair(car($0)) ? .True : .False}))
-Environment.Global.DefineVariable("procedure?", value: .PrimitiveProc(p: {IsProcedure(car($0)) || IsCompoundProc(car($0)) ? .True : .False}))
+Environment.Global.DefineVariable("null?"     , value: PrimitiveProc(p: {car($0) === Nil ? True : False}))
+Environment.Global.DefineVariable("boolean?"  , value: PrimitiveProc(p: _ProcIsBoolean))
+Environment.Global.DefineVariable("symbol?"   , value: PrimitiveProc(p: {IsSymbol(car($0)) ? True : False }))
+Environment.Global.DefineVariable("integer?"  , value: PrimitiveProc(p: {IsFixnum(car($0)) ? True : False}))
+Environment.Global.DefineVariable("character?", value: PrimitiveProc(p: {IsChrLit(car($0)) ? True : False}))
+Environment.Global.DefineVariable("string?"   , value: PrimitiveProc(p: {IsStrLit(car($0)) ? True : False}))
+Environment.Global.DefineVariable("pair?"     , value: PrimitiveProc(p: {IsPair(car($0)) ? True : False}))
+Environment.Global.DefineVariable("procedure?", value: PrimitiveProc(p: {IsProcedure(car($0)) || IsCompoundProc(car($0)) ? True : False}))
 
-Environment.Global.DefineVariable("char->integer" , value: .PrimitiveProc(p: _ProcCharToInteger))
-Environment.Global.DefineVariable("integer->char" , value: .PrimitiveProc(p: _ProcIntegerToChar))
-Environment.Global.DefineVariable("number->string", value: .PrimitiveProc(p: _ProcNumberToString))
-Environment.Global.DefineVariable("string->number", value: .PrimitiveProc(p: _ProcStringToNumber))
-Environment.Global.DefineVariable("symbol->string", value: .PrimitiveProc(p: _ProcSymbolToString))
-Environment.Global.DefineVariable("string->symbol", value: .PrimitiveProc(p: _ProcStringToSymbol))
+Environment.Global.DefineVariable("char->integer" , value: PrimitiveProc(p: _ProcCharToInteger))
+Environment.Global.DefineVariable("integer->char" , value: PrimitiveProc(p: _ProcIntegerToChar))
+Environment.Global.DefineVariable("number->string", value: PrimitiveProc(p: _ProcNumberToString))
+Environment.Global.DefineVariable("string->number", value: PrimitiveProc(p: _ProcStringToNumber))
+Environment.Global.DefineVariable("symbol->string", value: PrimitiveProc(p: _ProcSymbolToString))
+Environment.Global.DefineVariable("string->symbol", value: PrimitiveProc(p: _ProcStringToSymbol))
 
-Environment.Global.DefineVariable("+", value: .PrimitiveProc(p: _ProcAdd))
-Environment.Global.DefineVariable("=", value: .PrimitiveProc(p: _ProcNumEq))
+Environment.Global.DefineVariable("+", value: PrimitiveProc(p: _ProcAdd))
+Environment.Global.DefineVariable("=", value: PrimitiveProc(p: _ProcNumEq))
 
 
-Environment.Global.DefineVariable("cons", value: .PrimitiveProc(p: { .Pair(first: car($0), second: cadr($0)) }))
-Environment.Global.DefineVariable("car" , value: .PrimitiveProc(p: { car($0) }))
-Environment.Global.DefineVariable("cdr" , value: .PrimitiveProc(p: { cdr($0) }))
-Environment.Global.DefineVariable("list", value: .PrimitiveProc(p: { $0 }))
-Environment.Global.DefineVariable("eq?" , value: .PrimitiveProc(p: { car($0) == cadr($0) ? .True : .False }))
+Environment.Global.DefineVariable("cons", value: PrimitiveProc(p: { Pair(fst: car($0), snd: cadr($0)) }))
+Environment.Global.DefineVariable("car" , value: PrimitiveProc(p: { car($0) }))
+Environment.Global.DefineVariable("cdr" , value: PrimitiveProc(p: { cdr($0) }))
+Environment.Global.DefineVariable("list", value: PrimitiveProc(p: { $0 }))
+Environment.Global.DefineVariable("eq?" , value: PrimitiveProc(p: { car($0) === cadr($0) ? True : False }))
 
+
+func Write(v: Value) {
+	print(v.ToString())
+}
 
 //
 print("Welcome to Sanguinius v0.13. Use ctrl-c to exit")
