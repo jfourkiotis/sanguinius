@@ -1,4 +1,4 @@
-## Sanguinius
+## Sanguinius **[Discontinued]**
 
 `sanguinius` is an experimental half-finished basic **scheme** interpreter written in `swift`. In order to build `sanguinius` from sources, the following are required:
 
